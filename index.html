@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>CRUD JSON API - Demo</title>
+<style>
+  /* Reset & base */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0; padding: 10px;
+    background: #f0f2f5;
+    color: #333;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+  }
+  #app-container {
+    width: 100%;
+    max-width: 350px;
+    background: white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    padding: 15px;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+  }
+  label {
+    margin-bottom: 5px;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  input[type="text"], textarea {
+    padding: 8px;
+    font-size: 1rem;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    margin-bottom: 10px;
+    resize: vertical;
+  }
+  textarea {
+    min-height: 60px;
+  }
+  button {
+    background-color: #3498db;
+    border: none;
+    color: white;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  button:hover {
+    background-color: #2980b9;
+  }
+  button:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+  th {
+    background-color: #3498db;
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  tr:hover {
+    background-color: #f1f8ff;
+  }
+  .actions button {
+    background-color: #e74c3c;
+    margin-right: 5px;
+    padding: 6px 10px;
+    font-weight: 600;
+  }
+  .actions button.edit-btn {
+    background-color: #27ae60;
+  }
+  .actions button:hover {
+    opacity: 0.85;
+  }
+  #loading {
+    text-align: center;
+    color: #666;
+    margin-top: 15px;
+  }
+  @media (max-width: 400px) {
+    #app-container {
+      max-width: 100%;
+      padding: 10px;
+    }
+    th, td {
+      font-size: 0.85rem;
+      padding: 6px 4px;
+    }
+    button {
+      font-size: 0.9rem;
+      padding: 8px;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>Gestor CRUD JSON API</h1>
+  <div id="app-container">
+    <form id="data-form">
+      <input type="hidden" id="object-id" />
+      <label for="name">Nombre:</label>
+      <input type="text" id="name" required placeholder="Nombre del objeto" />
+      <label for="description">Descripción:</label>
+      <textarea id="description" placeholder="Descripción del objeto"></textarea>
+      <button type="submit" id="submit-btn">Crear</button>
+      <button type="button" id="cancel-btn" style="display:none; margin-top:5px; background-color:#95a5a6;">Cancelar</button>
+    </form>
+    <div id="loading" style="display:none;">Cargando datos...</div>
+    <table id="data-table" aria-label="Lista de objetos API" style="display:none;">
+      <thead>
+        <tr>
+          <th>Id</th>
+          <th>Nombre</th>
+          <th>Descripción</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <!-- Datos se llenarán aquí -->
+      </tbody>
+    </table>
+  </div>
+
+<script>
+  (() => {
+    const apiBase = 'https://api.restful-api.dev/objects';
+    const form = document.getElementById('data-form');
+    const idInput = document.getElementById('object-id');
+    const nameInput = document.getElementById('name');
+    const descriptionInput = document.getElementById('description');
+    const submitBtn = document.getElementById('submit-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const table = document.getElementById('data-table');
+    const tbody = document.getElementById('table-body');
+    const loadingText = document.getElementById('loading');
+
+    // Fetch and list items
+    async function fetchData() {
+      try {
+        loadingText.style.display = 'block';
+        table.style.display = 'none';
+        const res = await fetch(apiBase);
+        if (!res.ok) throw new Error('Error al obtener datos');
+        const data = await res.json();
+        populateTable(data);
+        loadingText.style.display = 'none';
+        table.style.display = data.length > 0 ? 'table' : 'none';
+      } catch (err) {
+        loadingText.textContent = 'Error cargando datos. Intenta recargar.';
+        console.error(err);
+      }
+    }
+
+    // Populate table rows with data
+    function populateTable(data) {
+      tbody.innerHTML = '';
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No hay datos para mostrar</td></tr>';
+        return;
+      }
+      data.forEach(item => {
+        // Get id from nested _id object or id property
+        let idValue = '';
+        if (item._id) {
+          if (typeof item._id === 'object') {
+            idValue = item._id.$oid || '';
+          } else {
+            idValue = item._id;
+          }
+        } else if(item.id) {
+          idValue = item.id;
+        }
+        const name = item.name || '';
+        const description = item.description || '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idValue}</td>
+          <td>${escapeHtml(name)}</td>
+          <td>${escapeHtml(description)}</td>
+          <td class="actions">
+            <button class="edit-btn" data-id="${idValue}" title="Editar">✏️</button>
+            <button class="delete-btn" data-id="${idValue}" title="Eliminar">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      addActionListeners();
+    }
+
+    // Escape text for HTML output to prevent injection
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+    }
+
+    // Add event listeners to edit and delete buttons
+    function addActionListeners() {
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.onclick = () => editItem(btn.dataset.id);
+      });
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.onclick = () => deleteItem(btn.dataset.id);
+      });
+    }
+
+    // Edit item: fetch details to fill the form
+    async function editItem(id) {
+      try {
+        submitBtn.disabled = true;
+        loadingText.style.display = 'block';
+        loadingText.textContent = 'Cargando datos para editar...';
+        const res = await fetch(`${apiBase}/${id}`);
+        if (!res.ok) throw new Error('Error al obtener el objeto');
+        const data = await res.json();
+        idInput.value = id;
+        nameInput.value = data.name || '';
+        descriptionInput.value = data.description || '';
+        submitBtn.textContent = 'Actualizar';
+        cancelBtn.style.display = 'block';
+        loadingText.style.display = 'none';
+        submitBtn.disabled = false;
+      } catch (err) {
+        console.error(err);
+        alert('Error cargando los datos para editar');
+        loadingText.style.display = 'none';
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Delete item: confirmation and call delete
+    async function deleteItem(id) {
+      if (!confirm('¿Estás seguro que quieres eliminar este objeto?')) return;
+      try {
+        loadingText.style.display = 'block';
+        loadingText.textContent = 'Eliminando objeto...';
+        const res = await fetch(`${apiBase}/${id}`, {
+          method: 'DELETE'
+        });
+        if (res.status === 204 || res.ok) {
+          alert('Objeto eliminado correctamente.');
+          await fetchData();
+        } else {
+          throw new Error('Error al eliminar objeto');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error eliminando el objeto');
+      } finally {
+        loadingText.style.display = 'none';
+      }
+    }
+
+    // Clear form and reset UI
+    function resetForm() {
+      idInput.value = '';
+      nameInput.value = '';
+      descriptionInput.value = '';
+      submitBtn.textContent = 'Crear';
+      cancelBtn.style.display = 'none';
+    }
+
+    cancelBtn.onclick = () => {
+      resetForm();
+    };
+
+    // Handle form submit for create or update
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      loadingText.style.display = 'block';
+      loadingText.textContent = idInput.value ? 'Actualizando objeto...' : 'Creando objeto...';
+
+      const bodyData = {
+        name: nameInput.value.trim(),
+        description: descriptionInput.value.trim()
+      };
+
+      try {
+        let res;
+        if (idInput.value) {
+          // Update
+          res = await fetch(`${apiBase}/${idInput.value}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bodyData)
+          });
+          if (!res.ok) throw new Error('Error actualizando objeto');
+          alert('Objeto actualizado correctamente.');
+        } else {
+          // Create
+          res = await fetch(apiBase, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bodyData)
+          });
+          if (!res.ok) throw new Error('Error creando objeto');
+          alert('Objeto creado correctamente.');
+        }
+        resetForm();
+        await fetchData();
+      } catch (err) {
+        console.error(err);
+        alert('Error al guardar los datos.');
+      } finally {
+        submitBtn.disabled = false;
+        loadingText.style.display = 'none';
+      }
+    });
+
+    // Initialize app by loading data
+    fetchData();
+
+  })();
+</script>
+
+</body>
+</html>
